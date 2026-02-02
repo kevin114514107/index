@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>World Flag Museum</title>
+    <style>
+        :root {
+            --android-green: #0F9D58; 
+            --android-bg: #F1F3F4; 
+            --card-border: #DADCE0;
+            --text-primary: #202124;
+            --text-secondary: #70757a;
+            --flag-border: #D1D1D1;
+        }
+        body {
+            margin: 0; padding: 0;
+            background-color: var(--android-bg);
+            font-family: "Roboto", "Noto Sans SC", "PingFang SC", sans-serif;
+        }
+        header {
+            position: sticky; top: 0; background: white; 
+            padding: 12px 16px; border-bottom: 1px solid var(--card-border);
+            z-index: 1000; box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+        .selector-group { display: flex; gap: 10px; max-width: 900px; margin: 0 auto; }
+        
+        select {
+            flex: 1; padding: 12px; border-radius: 8px;
+            border: 1px solid var(--card-border);
+            background: #f8f9fa; font-size: 14px; color: var(--text-primary);
+            outline: none; cursor: pointer;
+        }
+        #container {
+            display: grid; padding: 16px; gap: 20px;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            max-width: 1400px; margin: 0 auto;
+        }
+        .flag-card { 
+            background: white; border: 1px solid var(--card-border); 
+            overflow: hidden; border-radius: 12px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            display: flex; flex-direction: column;
+            transition: transform 0.2s;
+        }
+        
+        .flag-card:hover { transform: translateY(-4px); }
+        .flag-wrapper {
+            padding: 20px; background: #ffffff;
+            display: flex; justify-content: center; align-items: center;
+            aspect-ratio: 16 / 10;
+        }
+        .flag-card img { 
+            max-width: 100%; max-height: 100%; display: block; 
+            border: 1px solid var(--flag-border);
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+        }
+        .flag-info { 
+            padding: 16px; text-align: center; 
+            background: #ffffff; border-top: 1px solid #f1f1f1;
+            flex-grow: 1; display: flex; flex-direction: column; justify-content: center;
+        }
+        
+        .full-name { 
+            font-size: 16px; color: var(--text-primary); 
+            font-weight: 800; margin-bottom: 6px;
+            line-height: 1.2;
+        }
+        
+        .short-name { 
+            font-size: 13px; color: var(--text-secondary); 
+            font-weight: 400;
+        }
+        #fab {
+            position: fixed; bottom: 24px; right: 24px; width: 56px; height: 56px;
+            background-color: var(--android-green); color: white; border-radius: 50%;
+            display: flex; justify-content: center; align-items: center; font-size: 24px;
+            box-shadow: 0 6px 10px rgba(0,0,0,0.2); border: none; z-index: 999; cursor: pointer;
+        }
+        #lang-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0, 0, 0, 0.5); display: none;
+            justify-content: center; align-items: center; z-index: 2000;
+        }
+        #lang-dialog { background: #FFFFFF; width: 85%; max-width: 400px; padding: 24px; border-radius: 12px; }
+        .lang-option { display: flex; align-items: center; padding: 16px 0; cursor: pointer; border-bottom: 1px solid #f1f1f1; }
+        .lang-option input { margin-right: 15px; }
+    </style>
+</head>
+<body>
+<header>
+    <div class="selector-group">
+        <select id="continent-select" onchange="updateRegions()"></select>
+        <select id="region-select" onchange="renderFlags()"></select>
+    </div>
+</header>
+<div id="container"></div>
+<button id="fab" onclick="showDialog()">🌐</button>
+<div id="lang-overlay">
+    <div id="lang-dialog">
+        <h3 id="ui-title">语言设定 / Language</h3>
+        <div class="lang-option" onclick="setRadio('zh-CN')"><input type="radio" name="lang" value="zh-CN" checked> 简体中文</div>
+        <div class="lang-option" onclick="setRadio('zh-TW')"><input type="radio" name="lang" value="zh-TW"> 繁體中文</div>
+        <div class="lang-option" onclick="setRadio('en')"><input type="radio" name="lang" value="en"> English</div>
+        <div style="text-align:right; margin-top:20px;">
+            <button onclick="applyLanguage()" style="background:none; border:none; color:var(--android-green); font-weight:bold; cursor:pointer; font-size:16px;">确定/OK</button>
+        </div>
+    </div>
+</div>
+<script>
+    let currentLang = 'zh-CN';
+    const uiText = { 
+        'all': { 'zh-CN': '全部区域', 'zh-TW': '全部區域', 'en': 'All Regions' },
+        'all_countries': { 'zh-CN': '全部国家 / All Countries', 'zh-TW': '全部國家 / All Countries', 'en': 'All Countries' },
+        'title': { 'zh-CN': '语言设定', 'zh-TW': '語言設定', 'en': 'Language' },
+        'confirm': { 'zh-CN': '确定/OK', 'zh-TW': '確定/OK', 'en': 'OK' }
+    };
+    const worldData = {
+        "亚洲 / Asia": {
+            "east": { "zh-CN": "东亚", "zh-TW": "東亞", "en": "East Asia", countries: [
+                { id: "cn", "zh-CN": ["中华人民共和国", "中国"], "zh-TW": ["中華人民共和國", "中國"], "en": ["People's Republic Of China", "China"] },
+                { id: "jp", "zh-CN": ["日本国", "日本"], "zh-TW": ["日本國", "日本"], "en": ["State of Japan", "Japan"] },
+                { id: "kr", "zh-CN": ["大韩民国", "韩国"], "zh-TW": ["大韓民國", "南韓"], "en": ["Republic of Korea", "South Korea"] },
+                { id: "tw", "zh-CN": ["中华民国(中国台湾)", "台湾"], "zh-TW": ["中華民國(中國台灣)", "台灣"], "en": ["Republic of China (Taiwan, China)", "Taiwan"] },
+                { id: "hk", "zh-CN": ["中华人民共和国香港特别行政区", "香港"], "zh-TW": ["中華人民共和國香港特別行政區", "香港"], "en": ["Hong Kong Special Administrative Region of the People's Republic of China", "Hong Kong"] },
+                { id: "mo", "zh-CN": ["中华人民共和国澳门特别行政区", "澳门"], "zh-TW": ["中華人民共和國澳門特別行政區", "澳門"], "en": ["Macao Special Administrative Region of the People's Republic of China", "Macau"] },
+                { id: "mn", "zh-CN": ["蒙古国", "蒙古"], "zh-TW": ["蒙古國", "蒙古"], "en": ["Mongolia", "Mongolia"] },
+                { id: "kp", "zh-CN": ["朝鲜民主主义人民共和国", "朝鲜"], "zh-TW": ["朝鮮民主主義人民共和國", "北韓"], "en": ["Democratic People's Republic of Korea", "North Korea"] }
+            ]},
+            "southeast": { "zh-CN": "东南亚", "zh-TW": "東南亞", "en": "SE Asia", countries: [
+                { id: "sg", "zh-CN": ["新加坡共和国", "新加坡"], "zh-TW": ["新加坡共和國", "新加坡"], "en": ["Republic of Singapore", "Singapore"] },
+                { id: "my", "zh-CN": ["马来西亚", "马来西亚"], "zh-TW": ["馬來西亞", "馬來西亞"], "en": ["Malaysia", "Malaysia"] },
+                { id: "th", "zh-CN": ["泰王国", "泰国"], "zh-TW": ["泰王國", "泰國"], "en": ["Kingdom of Thailand", "Thailand"] },
+                { id: "vn", "zh-CN": ["越南社会主义共和国", "越南"], "zh-TW": ["越南社會主義共和國", "越南"], "en": ["Socialist Republic of Vietnam", "Vietnam"] },
+                { id: "ph", "zh-CN": ["菲律宾共和国", "菲律宾"], "zh-TW": ["菲律賓共和國", "菲律賓"], "en": ["Republic of the Philippines", "Philippines"] },
+                { id: "id", "zh-CN": ["印度尼西亚共和国", "印尼"], "zh-TW": ["印度尼西亞共和國", "印尼"], "en": ["Republic of Indonesia", "Indonesia"] },
+                { id: "kh", "zh-CN": ["柬埔寨王国", "柬埔寨"], "zh-TW": ["柬埔寨王國", "柬埔寨"], "en": ["Kingdom of Cambodia", "Cambodia"] },
+                { id: "la", "zh-CN": ["老挝人民民主共和国", "老挝"], "zh-TW": ["寮人民民主共和國", "寮國"], "en": ["Lao People's Democratic Republic", "Laos"] },
+                { id: "mm", "zh-CN": ["缅甸联邦共和国", "缅甸"], "zh-TW": ["緬甸聯邦共和國", "緬甸"], "en": ["Republic of the Union of Myanmar", "Myanmar"] },
+                { id: "bn", "zh-CN": ["文莱达鲁萨兰国", "文莱"], "zh-TW": ["汶萊達魯薩蘭國", "汶萊"], "en": ["Brunei Darussalam", "Brunei"] },
+                { id: "tl", "zh-CN": ["东帝汶民主共和国", "东帝汶"], "zh-TW": ["東帝汶民主共和國", "東帝汶"], "en": ["Democratic Republic of Timor-Leste", "East Timor"] }
+            ]},
+            "south": { "zh-CN": "南亚", "zh-TW": "南亞", "en": "South Asia", countries: [
+                { id: "in", "zh-CN": ["印度共和国", "印度"], "zh-TW": ["印度共和國", "印度"], "en": ["Republic of India", "India"] },
+                { id: "pk", "zh-CN": ["巴基斯坦伊斯兰共和国", "巴基斯坦"], "zh-TW": ["巴基斯坦伊斯蘭共和國", "巴基斯坦"], "en": ["Islamic Republic of Pakistan", "Pakistan"] },
+                { id: "bd", "zh-CN": ["孟加拉人民共和国", "孟加拉"], "zh-TW": ["孟加拉人民共和國", "孟加拉"], "en": ["People's Republic of Bangladesh", "Bangladesh"] },
+                { id: "lk", "zh-CN": ["斯里兰卡民主社会主义共和国", "斯里兰卡"], "zh-TW": ["斯里蘭卡民主社會主義共和國", "斯里蘭卡"], "en": ["Democratic Socialist Republic of Sri Lanka", "Sri Lanka"] },
+                { id: "np", "zh-CN": ["尼泊尔联邦民主共和国", "尼泊尔"], "zh-TW": ["尼泊爾聯邦民主共和國", "尼泊爾"], "en": ["Federal Democratic Republic of Nepal", "Nepal"] },
+                { id: "mv", "zh-CN": ["马尔代夫共和国", "马尔代夫"], "zh-TW": ["馬爾地夫共和國", "馬爾地夫"], "en": ["Republic of Maldives", "Maldives"] },
+                { id: "bt", "zh-CN": ["不丹王国", "不丹"], "zh-TW": ["不丹王國", "不丹"], "en": ["Kingdom of Bhutan", "Bhutan"] }
+            ]},
+            "west": { "zh-CN": "西亚", "zh-TW": "西亞", "en": "West Asia", countries: [
+                { id: "sa", "zh-CN": ["沙特阿拉伯王国", "沙特"], "zh-TW": ["沙烏地阿拉伯王國", "沙烏地阿拉伯"], "en": ["Kingdom of Saudi Arabia", "Saudi Arabia"] },
+                { id: "ae", "zh-CN": ["阿拉伯联合酋长国", "阿联酋"], "zh-TW": ["阿拉伯聯合大公國", "阿聯酋"], "en": ["United Arab Emirates", "UAE"] },
+                { id: "tr", "zh-CN": ["土耳其共和国", "土耳其"], "zh-TW": ["土耳其共和國", "土耳其"], "en": ["Republic of Türkiye", "Turkey"] },
+                { id: "il", "zh-CN": ["以色列国", "以色列"], "zh-TW": ["以色列國", "以色列"], "en": ["State of Israel", "Israel"] },
+                { id: "ir", "zh-CN": ["伊朗伊斯兰共和国", "伊朗"], "zh-TW": ["伊朗伊斯蘭共和國", "伊朗"], "en": ["Islamic Republic of Iran", "Iran"] },
+                { id: "iq", "zh-CN": ["伊拉克共和国", "伊拉克"], "zh-TW": ["伊拉克共和國", "伊拉克"], "en": ["Republic of Iraq", "Iraq"] },
+                { id: "qa", "zh-CN": ["卡塔尔国", "卡塔尔"], "zh-TW": ["卡達國", "卡達"], "en": ["State of Qatar", "Qatar"] },
+                { id: "kw", "zh-CN": ["科威特国", "科威特"], "zh-TW": ["科威特國", "科威特"], "en": ["State of Kuwait", "Kuwait"] },
+                { id: "om", "zh-CN": ["阿曼苏丹国", "阿曼"], "zh-TW": ["阿曼蘇丹國", "阿曼"], "en": ["Sultanate of Oman", "Oman"] },
+                { id: "jo", "zh-CN": ["约旦哈希姆王国", "约旦"], "zh-TW": ["約旦哈希姆王國", "約旦"], "en": ["Hashemite Kingdom of Jordan", "Jordan"] },
+                { id: "lb", "zh-CN": ["黎巴嫩共和国", "黎巴嫩"], "zh-TW": ["黎巴嫩共和國", "黎巴嫩"], "en": ["Republic of Lebanon", "Lebanon"] },
+                { id: "sy", "zh-CN": ["阿拉伯叙利亚共和国", "叙利亚"], "zh-TW": ["阿拉伯敘利亞共和國", "敘利亞"], "en": ["Syrian Arab Republic", "Syria"] },
+                { id: "ye", "zh-CN": ["也门共和国", "也门"], "zh-TW": ["葉門共和國", "葉門"], "en": ["Republic of Yemen", "Yemen"] },
+                { id: "ge", "zh-CN": ["格鲁吉亚", "格鲁吉亚"], "zh-TW": ["喬治亞", "喬治亞"], "en": ["Georgia", "Georgia"] },
+                { id: "am", "zh-CN": ["亚美尼亚共和国", "亚美尼亚"], "zh-TW": ["亞美尼亞共和國", "亞美尼亞"], "en": ["Republic of Armenia", "Armenia"] },
+                { id: "az", "zh-CN": ["阿塞拜疆共和国", "阿塞拜疆"], "zh-TW": ["亞塞拜然共和國", "亞塞拜然"], "en": ["Republic of Azerbaijan", "Azerbaijan"] }
+            ]},
+            "central": { "zh-CN": "中亚", "zh-TW": "中亞", "en": "Central Asia", countries: [
+                { id: "kz", "zh-CN": ["哈萨克斯坦共和国", "哈萨克斯坦"], "zh-TW": ["哈薩克共和國", "哈薩克"], "en": ["Republic of Kazakhstan", "Kazakhstan"] },
+                { id: "uz", "zh-CN": ["乌兹别克斯坦共和国", "乌兹别克斯坦"], "zh-TW": ["烏茲別克共和國", "烏茲別克"], "en": ["Republic of Uzbekistan", "Uzbekistan"] },
+                { id: "tm", "zh-CN": ["土库曼斯坦", "土库曼斯坦"], "zh-TW": ["土庫曼共和國", "土庫曼"], "en": ["Turkmenistan", "Turkmenistan"] },
+                { id: "kg", "zh-CN": ["吉尔吉斯共和国", "吉尔吉斯斯坦"], "zh-TW": ["吉爾吉斯共和國", "吉爾吉斯"], "en": ["Kyrgyz Republic", "Kyrgyzstan"] },
+                { id: "tj", "zh-CN": ["塔吉克斯坦共和国", "塔吉克斯坦"], "zh-TW": ["塔吉克共和國", "塔吉克"], "en": ["Republic of Tajikistan", "Tajikistan"] },
+                { id: "af", "zh-CN": ["阿富汗伊斯兰酋长国", "阿富汗"], "zh-TW": ["阿富汗伊斯蘭酋長國", "阿富汗"], "en": ["Islamic Emirate of Afghanistan", "Afghanistan"] }
+            ]}
+        },
+        "欧洲 / Europe": {
+            "west": { "zh-CN": "西欧", "zh-TW": "西歐", "en": "Western Europe", countries: [
+                { id: "gb", "zh-CN": ["大不列颠及北爱尔兰联合王国", "英国"], "zh-TW": ["大不列顛及北愛爾蘭聯合王國", "英國"], "en": ["United Kingdom of Great Britain and Northern Ireland", "UK"] },
+                { id: "fr", "zh-CN": ["法兰西共和国", "法国"], "zh-TW": ["法蘭西共和國", "法國"], "en": ["French Republic", "France"] },
+                { id: "de", "zh-CN": ["德意志联邦共和国", "德国"], "zh-TW": ["德意志聯邦共和國", "德國"], "en": ["Federal Republic of Germany", "Germany"] },
+                { id: "nl", "zh-CN": ["荷兰王国", "荷兰"], "zh-TW": ["荷蘭王國", "荷蘭"], "en": ["Kingdom of the Netherlands", "Netherlands"] },
+                { id: "be", "zh-CN": ["比利时王国", "比利时"], "zh-TW": ["比利時王國", "比利時"], "en": ["Kingdom of Belgium", "Belgium"] },
+                { id: "ch", "zh-CN": ["瑞士联邦", "瑞士"], "zh-TW": ["瑞士聯邦", "瑞士"], "en": ["Swiss Confederation", "Switzerland"] },
+                { id: "ie", "zh-CN": ["爱尔兰共和国", "爱尔兰"], "zh-TW": ["愛爾蘭共和國", "愛爾蘭"], "en": ["Republic of Ireland", "Ireland"] },
+                { id: "lu", "zh-CN": ["卢森堡大公国", "卢森堡"], "zh-TW": ["盧森堡大公國", "盧森堡"], "en": ["Grand Duchy of Luxembourg", "Luxembourg"] },
+                { id: "mc", "zh-CN": ["摩纳哥公国", "摩纳哥"], "zh-TW": ["摩納哥公國", "摩納哥"], "en": ["Principality of Monaco", "Monaco"] }
+            ]},
+            "north": { "zh-CN": "北欧", "zh-TW": "北歐", "en": "Northern Europe", countries: [
+                { id: "se", "zh-CN": ["瑞典王国", "瑞典"], "zh-TW": ["瑞典王國", "瑞典"], "en": ["Kingdom of Sweden", "Sweden"] },
+                { id: "no", "zh-CN": ["挪威王国", "挪威"], "zh-TW": ["挪威王國", "挪威"], "en": ["Kingdom of Norway", "Norway"] },
+                { id: "fi", "zh-CN": ["芬兰共和国", "芬兰"], "zh-TW": ["芬蘭共和國", "芬蘭"], "en": ["Republic of Finland", "Finland"] },
+                { id: "dk", "zh-CN": ["丹麦王国", "丹麦"], "zh-TW": ["丹麥王國", "丹麥"], "en": ["Kingdom of Denmark", "Denmark"] },
+                { id: "is", "zh-CN": ["冰岛共和国", "冰岛"], "zh-TW": ["冰島共和國", "冰島"], "en": ["Republic of Iceland", "Iceland"] }
+            ]},
+            "south": { "zh-CN": "南欧", "zh-TW": "南歐", "en": "Southern Europe", countries: [
+                { id: "it", "zh-CN": ["意大利共和国", "意大利"], "zh-TW": ["義大利共和國", "義大利"], "en": ["Italian Republic", "Italy"] },
+                { id: "es", "zh-CN": ["西班牙王国", "西班牙"], "zh-TW": ["西班牙王國", "西班牙"], "en": ["Kingdom of Spain", "Spain"] },
+                { id: "pt", "zh-CN": ["葡萄牙共和国", "葡萄牙"], "zh-TW": ["葡萄牙共和國", "葡萄牙"], "en": ["Portuguese Republic", "Portugal"] },
+                { id: "gr", "zh-CN": ["希腊共和国", "希腊"], "zh-TW": ["希臘共和國", "希臘"], "en": ["Hellenic Republic", "Greece"] },
+                { id: "va", "zh-CN": ["梵蒂冈城国", "梵蒂冈"], "zh-TW": ["梵蒂岡城國", "梵蒂岡"], "en": ["Vatican City State", "Vatican"] },
+                { id: "mt", "zh-CN": ["马耳他共和国", "马耳他"], "zh-TW": ["馬爾他共和國", "馬爾他"], "en": ["Republic of Malta", "Malta"] },
+                { id: "hr", "zh-CN": ["克罗地亚共和国", "克罗地亚"], "zh-TW": ["克羅埃西亞共和國", "克羅埃西亞"], "en": ["Republic of Croatia", "Croatia"] },
+                { id: "rs", "zh-CN": ["塞尔维亚共和国", "塞尔维亚"], "zh-TW": ["塞爾維亞共和國", "塞爾維亞"], "en": ["Republic of Serbia", "Serbia"] }
+            ]},
+            "central_east": { "zh-CN": "中东欧", "zh-TW": "中東歐", "en": "Central/East Europe", countries: [
+                { id: "ru", "zh-CN": ["俄罗斯联邦", "俄罗斯"], "zh-TW": ["俄羅斯聯邦", "俄羅斯"], "en": ["Russian Federation", "Russia"] },
+                { id: "ua", "zh-CN": ["乌克兰", "乌克兰"], "zh-TW": ["烏克蘭", "烏克蘭"], "en": ["Ukraine", "Ukraine"] },
+                { id: "pl", "zh-CN": ["波兰共和国", "波兰"], "zh-TW": ["波蘭共和國", "波蘭"], "en": ["Republic of Poland", "Poland"] },
+                { id: "at", "zh-CN": ["奥地利共和国", "奥地利"], "zh-TW": ["奧地利共和國", "奧地利"], "en": ["Republic of Austria", "Austria"] },
+                { id: "cz", "zh-CN": ["捷克共和国", "捷克"], "zh-TW": ["捷克共和國", "捷克"], "en": ["Czech Republic", "Czechia"] },
+                { id: "hu", "zh-CN": ["匈牙利", "匈牙利"], "zh-TW": ["匈牙利共和國", "匈牙利"], "en": ["Hungary", "Hungary"] },
+                { id: "ro", "zh-CN": ["罗马尼亚", "罗马尼亚"], "zh-TW": ["羅馬尼亞", "羅馬尼亞"], "en": ["Romania", "Romania"] },
+                { id: "bg", "zh-CN": ["保加利亚共和国", "保加利亚"], "zh-TW": ["保加利亞共和國", "保加利亞"], "en": ["Republic of Bulgaria", "Bulgaria"] },
+                { id: "by", "zh-CN": ["白俄罗斯共和国", "白俄罗斯"], "zh-TW": ["白俄羅斯共和國", "白俄羅斯"], "en": ["Republic of Belarus", "Belarus"] }
+            ]}
+        },
+        "美洲 / Americas": {
+            "north": { "zh-CN": "北美", "zh-TW": "北美", "en": "North America", countries: [
+                { id: "us", "zh-CN": ["美利坚合众国", "美国"], "zh-TW": ["美利堅合眾國", "美國"], "en": ["United States of America", "USA"] },
+                { id: "ca", "zh-CN": ["加拿大", "加拿大"], "zh-TW": ["加拿大", "加拿大"], "en": ["Canada", "Canada"] },
+                { id: "mx", "zh-CN": ["墨西哥合众国", "墨西哥"], "zh-TW": ["墨西哥合眾國", "墨西哥"], "en": ["United Mexican States", "Mexico"] }
+            ]},
+            "central_carib": { "zh-CN": "中美与加勒比", "zh-TW": "中美與加勒比", "en": "Central & Caribbean", countries: [
+                { id: "cu", "zh-CN": ["古巴共和国", "古巴"], "zh-TW": ["古巴共和國", "古巴"], "en": ["Republic of Cuba", "Cuba"] },
+                { id: "pa", "zh-CN": ["巴拿马共和国", "巴拿马"], "zh-TW": ["巴拿馬共和國", "巴拿馬"], "en": ["Republic of Panama", "Panama"] },
+                { id: "cr", "zh-CN": ["哥斯达黎加共和国", "哥斯达黎加"], "zh-TW": ["哥斯大黎加共和國", "哥斯大黎加"], "en": ["Republic of Costa Rica", "Costa Rica"] },
+                { id: "jm", "zh-CN": ["牙买加", "牙买加"], "zh-TW": ["牙買加", "牙買加"], "en": ["Jamaica", "Jamaica"] },
+                { id: "gt", "zh-CN": ["危地马拉共和国", "危地马拉"], "zh-TW": ["瓜地馬拉共和國", "瓜地馬拉"], "en": ["Republic of Guatemala", "Guatemala"] },
+                { id: "do", "zh-CN": ["多米尼加共和国", "多米尼加"], "zh-TW": ["多明尼加共和國", "多明尼加"], "en": ["Dominican Republic", "Dominican Rep."] }
+            ]},
+            "south": { "zh-CN": "南美", "zh-TW": "南美", "en": "South America", countries: [
+                { id: "br", "zh-CN": ["巴西联邦共和国", "巴西"], "zh-TW": ["巴西聯邦共和國", "巴西"], "en": ["Federative Republic of Brazil", "Brazil"] },
+                { id: "ar", "zh-CN": ["阿根廷共和国", "阿根廷"], "zh-TW": ["阿根廷共和國", "阿根廷"], "en": ["Argentine Republic", "Argentina"] },
+                { id: "cl", "zh-CN": ["智利共和国", "智利"], "zh-TW": ["智利共和國", "智利"], "en": ["Republic of Chile", "Chile"] },
+                { id: "co", "zh-CN": ["哥伦比亚共和国", "哥伦比亚"], "zh-TW": ["哥倫比亞共和國", "哥倫比亞"], "en": ["Republic of Colombia", "Colombia"] },
+                { id: "pe", "zh-CN": ["秘鲁共和国", "秘鲁"], "zh-TW": ["秘魯共和國", "秘魯"], "en": ["Republic of Peru", "Peru"] },
+                { id: "ve", "zh-CN": ["委内瑞拉玻利瓦尔共和国", "委内瑞拉"], "zh-TW": ["委內瑞拉玻利瓦爾共和國", "委內瑞拉"], "en": ["Bolivarian Republic of Venezuela", "Venezuela"] },
+                { id: "ec", "zh-CN": ["厄瓜多尔共和国", "厄瓜多尔"], "zh-TW": ["厄瓜多共和國", "厄瓜多"], "en": ["Republic of Ecuador", "Ecuador"] },
+                { id: "uy", "zh-CN": ["乌拉圭东岸共和国", "乌拉圭"], "zh-TW": ["烏拉圭東岸共和國", "烏拉圭"], "en": ["Eastern Republic of Uruguay", "Uruguay"] },
+                { id: "bo", "zh-CN": ["多民族玻利维亚国", "玻利维亚"], "zh-TW": ["多民族玻利維亞國", "玻利維亞"], "en": ["Plurinational State of Bolivia", "Bolivia"] },
+                { id: "py", "zh-CN": ["巴拉圭共和国", "巴拉圭"], "zh-TW": ["巴拉圭共和國", "巴拉圭"], "en": ["Republic of Paraguay", "Paraguay"] }
+            ]}
+        },
+        "非洲 / Africa": {
+            "north": { "zh-CN": "北非", "zh-TW": "北非", "en": "North Africa", countries: [
+                { id: "eg", "zh-CN": ["阿拉伯埃及共和国", "埃及"], "zh-TW": ["阿拉伯埃及共和國", "埃及"], "en": ["Arab Republic of Egypt", "Egypt"] },
+                { id: "dz", "zh-CN": ["阿尔及利亚民主人民共和国", "阿尔及利亚"], "zh-TW": ["阿爾及利亞民主人民共和國", "阿爾及利亞"], "en": ["People's Democratic Republic of Algeria", "Algeria"] },
+                { id: "ma", "zh-CN": ["摩洛哥王国", "摩洛哥"], "zh-TW": ["摩洛哥王國", "摩洛哥"], "en": ["Kingdom of Morocco", "Morocco"] },
+                { id: "tn", "zh-CN": ["突尼斯共和国", "突尼斯"], "zh-TW": ["突尼西亞共和國", "突尼西亞"], "en": ["Republic of Tunisia", "Tunisia"] },
+                { id: "ly", "zh-CN": ["利比亚国", "利比亚"], "zh-TW": ["利比亞國", "利比亞"], "en": ["State of Libya", "Libya"] },
+                { id: "sd", "zh-CN": ["苏丹共和国", "苏丹"], "zh-TW": ["蘇丹共和國", "蘇丹"], "en": ["Republic of the Sudan", "Sudan"] }
+            ]},
+            "sub_saharan": { "zh-CN": "撒哈拉以南", "zh-TW": "撒哈拉以南", "en": "Sub-Saharan", countries: [
+                { id: "za", "zh-CN": ["南非共和国", "南非"], "zh-TW": ["南非共和國", "南非"], "en": ["Republic of South Africa", "South Africa"] },
+                { id: "ng", "zh-CN": ["尼日利亚联邦共和国", "尼日利亚"], "zh-TW": ["奈及利亞聯邦共和國", "奈及利亞"], "en": ["Federal Republic of Nigeria", "Nigeria"] },
+                { id: "ke", "zh-CN": ["肯尼亚共和国", "肯尼亚"], "zh-TW": ["肯亞共和國", "肯亞"], "en": ["Republic of Kenya", "Kenya"] },
+                { id: "et", "zh-CN": ["埃塞俄比亚联邦民主共和国", "埃塞俄比亚"], "zh-TW": ["衣索比亞聯邦民主共和國", "衣索比亞"], "en": ["Federal Democratic Republic of Ethiopia", "Ethiopia"] },
+                { id: "gh", "zh-CN": ["加纳共和国", "加纳"], "zh-TW": ["迦納共和國", "迦納"], "en": ["Republic of Ghana", "Ghana"] },
+                { id: "ci", "zh-CN": ["科特迪瓦共和国", "科特迪瓦"], "zh-TW": ["象牙海岸共和國", "象牙海岸"], "en": ["Republic of Côte d'Ivoire", "Ivory Coast"] },
+                { id: "tz", "zh-CN": ["坦桑尼亚联合共和国", "坦桑尼亚"], "zh-TW": ["坦尚尼亞聯合共和國", "坦尚尼亞"], "en": ["United Republic of Tanzania", "Tanzania"] },
+                { id: "ug", "zh-CN": ["乌干达共和国", "乌干达"], "zh-TW": ["烏干達共和國", "烏干達"], "en": ["Republic of Uganda", "Uganda"] },
+                { id: "sn", "zh-CN": ["塞内加尔共和国", "塞内加尔"], "zh-TW": ["塞內加爾共和國", "塞內加爾"], "en": ["Republic of Senegal", "Senegal"] },
+                { id: "ao", "zh-CN": ["安哥拉共和国", "安哥拉"], "zh-TW": ["安哥拉共和國", "安哥拉"], "en": ["Republic of Angola", "Angola"] },
+                { id: "cm", "zh-CN": ["喀麦隆共和国", "喀麦隆"], "zh-TW": ["喀麥隆共和國", "喀麥隆"], "en": ["Republic of Cameroon", "Cameroon"] }
+            ]}
+        },
+        "大洋洲 / Oceania": {
+            "main": { "zh-CN": "澳新与波利尼西亚", "zh-TW": "澳新與波利尼西亞", "en": "Oceania", countries: [
+                { id: "au", "zh-CN": ["澳大利亚联邦", "澳洲"], "zh-TW": ["澳大利亞聯邦", "澳大利亞"], "en": ["Commonwealth of Australia", "Australia"] },
+                { id: "nz", "zh-CN": ["新西兰", "新西兰"], "zh-TW": ["紐西蘭", "紐西蘭"], "en": ["New Zealand", "New Zealand"] },
+                { id: "fj", "zh-CN": ["斐济共和国", "斐济"], "zh-TW": ["斐濟共和國", "斐濟"], "en": ["Republic of Fiji", "Fiji"] },
+                { id: "pg", "zh-CN": ["巴布亚新几内亚独立国", "巴布亚"], "zh-TW": ["巴布亞紐幾內亞獨立國", "巴布亞紐幾內亞"], "en": ["Independent State of Papua New Guinea", "PNG"] },
+                { id: "sb", "zh-CN": ["所罗门群岛", "所罗门群岛"], "zh-TW": ["索羅門群島", "索羅門群島"], "en": ["Solomon Islands", "Solomon Is."] },
+                { id: "vu", "zh-CN": ["瓦努阿图共和国", "瓦努阿图"], "zh-TW": ["萬那杜共和國", "萬那杜"], "en": ["Republic of Vanuatu", "Vanuatu"] },
+                { id: "ws", "zh-CN": ["萨摩亚独立国", "萨摩亚"], "zh-TW": ["薩摩亞獨立國", "薩摩亞"], "en": ["Independent State of Samoa", "Samoa"] }
+            ]}
+        }
+    };
+    const continentSelect = document.getElementById('continent-select');
+    const regionSelect = document.getElementById('region-select');
+    function init() {
+        continentSelect.innerHTML = '';
+        
+        let allOpt = document.createElement('option');
+        allOpt.value = "ALL_WORLD";
+        allOpt.innerText = uiText.all_countries[currentLang];
+        continentSelect.appendChild(allOpt);
+        for (let key in worldData) {
+            let opt = document.createElement('option');
+            opt.value = key; opt.innerText = key;
+            continentSelect.appendChild(opt);
+        }
+        
+        document.getElementById('ui-title').innerText = uiText.title[currentLang] + ' / Language';
+        document.querySelector('#lang-dialog button').innerText = uiText.confirm[currentLang];
+        
+        updateRegions();
+    }
+    function updateRegions() {
+        const continent = continentSelect.value;
+        regionSelect.innerHTML = '';
+        if (continent === "ALL_WORLD") {
+            regionSelect.style.display = "none";
+        } else {
+            regionSelect.style.display = "block";
+            const regions = worldData[continent];
+            let allOpt = document.createElement('option');
+            allOpt.value = "all";
+            allOpt.innerText = uiText.all[currentLang];
+            regionSelect.appendChild(allOpt);
+            for (let key in regions) {
+                let opt = document.createElement('option');
+                opt.value = key;
+                opt.innerText = regions[key][currentLang];
+                regionSelect.appendChild(opt);
+            }
+        }
+        renderFlags();
+    }
+    function renderFlags() {
+        const contKey = continentSelect.value;
+        const regKey = regionSelect.value;
+        const container = document.getElementById('container');
+        container.innerHTML = '';
+        
+        let countries = [];
+        if (contKey === "ALL_WORLD") {
+            for (let c in worldData) {
+                for (let r in worldData[c]) {
+                    countries = countries.concat(worldData[c][r].countries);
+                }
+            }
+        } else if (regKey === "all") {
+            for (let r in worldData[contKey]) {
+                countries = countries.concat(worldData[contKey][r].countries);
+            }
+        } else {
+            countries = worldData[contKey][regKey].countries;
+        }
+        countries.forEach(c => {
+            const nameData = c[currentLang];
+            const card = document.createElement('div');
+            card.className = 'flag-card';
+            card.innerHTML = `
+                <div class="flag-wrapper">
+                    <img src="https://flagcdn.com/w640/${c.id}.png" 
+                         onerror="this.src='https://via.placeholder.com/640x400?text=Flag+Not+Found'" 
+                         alt="${nameData[0]}">
+                </div>
+                <div class="flag-info">
+                    <div class="full-name">${nameData[0]}</div>
+                    <div class="short-name">${nameData[1]}</div>
+                </div>`;
+            container.appendChild(card);
+        });
+    }
+    function showDialog() { document.getElementById('lang-overlay').style.display = 'flex'; }
+    function setRadio(lang) { document.querySelector(`input[name="lang"][value="${lang}"]`).checked = true; }
+    function applyLanguage() {
+        currentLang = document.querySelector('input[name="lang"]:checked').value;
+        document.getElementById('lang-overlay').style.display = 'none';
+        init(); 
+    }
+    init();
+</script>
+</body>
+</html>
